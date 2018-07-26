@@ -13,10 +13,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PiecesCache {
 
     private static final class KeyDescriptor {
-        public final long x, y;
+        final long x, y;
         private final int hash;
 
-        public KeyDescriptor(long x, long y) {
+        KeyDescriptor(long x, long y) {
             this.x = x;
             this.y = y;
             this.hash = (int) (x ^ y ^ (x >>> 32) ^ (y >>> 32));
@@ -36,6 +36,7 @@ public class PiecesCache {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private static final Map<KeyDescriptor, SoftReference<Image>>[] cache = new Map[Configuration.ZOOM_DEPTH + 1];
 
     static {
@@ -55,7 +56,6 @@ public class PiecesCache {
         if (sr == null) {
             return null;
         }
-        Image image = sr.get();
-        return image;
+        return sr.get();
     }
 }

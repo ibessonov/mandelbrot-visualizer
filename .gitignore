@@ -1,3 +1,5 @@
 nb-configuration.xml
 nbactions.xml
+mandelbrot-visualizer.iml
 target/
+.idea/

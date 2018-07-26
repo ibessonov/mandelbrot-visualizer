@@ -2,15 +2,10 @@ package ibessonov.fractal.screen;
 
 import ibessonov.fractal.cache.PiecesCache;
 import ibessonov.fractal.conf.Configuration;
-import ibessonov.fractal.events.ImageMoveListener;
-import ibessonov.fractal.events.ImagePaintListener;
-import ibessonov.fractal.events.ImageResizeListener;
-import ibessonov.fractal.events.ImageZoomListener;
+import ibessonov.fractal.gui.MainPanel;
 import ibessonov.fractal.util.FastLock;
-import java.awt.Color;
-import java.awt.Graphics;
-import java.awt.Image;
-import java.awt.Toolkit;
+
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
 import java.util.LinkedList;
@@ -18,44 +13,17 @@ import java.util.List;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import javax.swing.event.EventListenerList;
 
 /**
  *
  * @author Ivan Bessonov
  */
-public class Screen implements ImageMoveListener, ImageResizeListener,
-        ImageZoomListener {
+public class Screen {
 
-    private static final int BUFFER_WIDTH = Toolkit.getDefaultToolkit().getScreenSize().width;
-    private static final int BUFFER_HEIGHT =  Toolkit.getDefaultToolkit().getScreenSize().height;
+    private static final int BUFFER_WIDTH  = Toolkit.getDefaultToolkit().getScreenSize().width;
+    private static final int BUFFER_HEIGHT = Toolkit.getDefaultToolkit().getScreenSize().height;
 
-
-    public Screen() {
-        listenerList = new EventListenerList();
-        executorService = new ThreadPoolExecutor(
-                Runtime.getRuntime().availableProcessors(),
-                Runtime.getRuntime().availableProcessors(),
-                0, TimeUnit.MICROSECONDS,
-                new LinkedBlockingDeque<Runnable>() {
-
-                    @Override
-                    public boolean offerFirst(Runnable e) {
-                        return super.offerLast(e);
-                    }
-
-                    @Override
-                    public boolean offerLast(Runnable e) {
-                        return super.offerFirst(e);
-                    }
-                });
-        Graphics g = white.getGraphics();
-        g.setColor(Color.WHITE);
-        g.fillRect(0, 0, BUFFER_WIDTH, BUFFER_HEIGHT);
-        back.getGraphics().drawImage(white, 0, 0, null);
-    }
-    private final EventListenerList listenerList;
-    private final ThreadPoolExecutor executorService;
+    private ThreadPoolExecutor executorService;
     private Image image = new BufferedImage(BUFFER_WIDTH, BUFFER_HEIGHT, BufferedImage.TYPE_3BYTE_BGR);
     private Image back = new BufferedImage(BUFFER_WIDTH, BUFFER_HEIGHT, BufferedImage.TYPE_3BYTE_BGR);
     private Image white = new BufferedImage(BUFFER_WIDTH, BUFFER_HEIGHT, BufferedImage.TYPE_3BYTE_BGR);
@@ -64,7 +32,40 @@ public class Screen implements ImageMoveListener, ImageResizeListener,
     private long originX = (long) (-0.75 * Configuration.PIXELS_IN_UNIT);
     private long originY = 0;
 
-    private FastLock lock = new FastLock();
+    private final FastLock lock = new FastLock();
+    private final MainPanel mainPanel;
+
+    public Screen(MainPanel mainPanel) {
+        this.mainPanel = mainPanel;
+        init();
+    }
+
+    private void init() {
+        executorService = new ThreadPoolExecutor(
+                Runtime.getRuntime().availableProcessors(),
+                Runtime.getRuntime().availableProcessors(),
+                0, TimeUnit.MICROSECONDS,
+                new LinkedBlockingDeque<Runnable>() {
+
+                    @Override
+                    public boolean offer(Runnable e) {
+                        return super.offerFirst(e);
+                    }
+
+                    @Override
+                    public Runnable remove() {
+                        return super.removeFirst();
+                    }
+                });
+        Graphics g = white.getGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, BUFFER_WIDTH, BUFFER_HEIGHT);
+        g.dispose();
+
+        Graphics bg = back.getGraphics();
+        bg.drawImage(white, 0, 0, null);
+        bg.dispose();
+    }
 
     public Image getImage() {
         try (FastLock.Raii r = lock.read()) {
@@ -89,7 +90,6 @@ public class Screen implements ImageMoveListener, ImageResizeListener,
         back.getGraphics().drawImage(white, 0, 0, null);
     }
 
-    @Override
     public void imageMoved(int dx, int dy) {
         int x0, y0, x1, y1;
         try (FastLock.Raii w = lock.write()) {
@@ -103,24 +103,23 @@ public class Screen implements ImageMoveListener, ImageResizeListener,
             flip();
         }
 
-        notifyImagePaint(x0, y0, x1, y1);
+        mainPanel.repaint(x0, y0, x1, y1);
         createTasks(x0, y0, x1, y1);
     }
 
-    @Override
     public void imageResized(int width, int height) {
         try (FastLock.Raii w = lock.write()) {
             this.width = width;
             this.height = height;
 
-            notifyImagePaint();
+            mainPanel.repaint();
             createTasks();
         }
     }
 
-    @Override
-    public void imageZoomed(int rotation) {
-        try (FastLock.Raii w = lock.write()) {
+
+    public void imageZoomed(int mouseX, int mouseY, int rotation) {
+       try (FastLock.Raii w = lock.write()) {
             zoom += rotation;
             if (zoom < 0) {
                 rotation -= zoom;
@@ -131,33 +130,46 @@ public class Screen implements ImageMoveListener, ImageResizeListener,
             }
             if (0 == rotation) {
                 return;
-            } else if (rotation < 0) {
-                originX >>= -rotation;
-                originY >>= -rotation;
             } else {
-                originX <<= rotation;
-                originY <<= rotation;
+                int dmx = mouseX - width / 2;
+                int dmy = mouseY - height / 2;
+
+                long mx = originX + dmx;
+                long my = originY + dmy;
+
+                if (rotation < 0) {
+                    mx >>= -rotation;
+                    my >>= -rotation;
+                } else {
+                    mx <<= rotation;
+                    my <<= rotation;
+                }
+
+                originX = mx - dmx;
+                originY = my - dmy;
             }
 
+            Graphics bg = back.getGraphics();
             if (rotation < 0) {
                 int dz = 1 << -rotation;
-                int dx1 = width / 2 - width / 2 / dz;
-                int dy1 = height / 2 - height / 2 / dz;
+                int dx1 = mouseX - mouseX / dz;
+                int dy1 = mouseY - mouseY / dz;
                 int dx2 = dx1 + width / dz;
                 int dy2 = dy1 + height / dz;
-                back.getGraphics().drawImage(image, dx1, dy1, dx2, dy2, 0, 0, width, height, null);
+                bg.drawImage(image, dx1, dy1, dx2, dy2, 0, 0, width, height, null);
             } else {
                 int dz = 1 << rotation;
-                int dx1 = width / 2 - width / 2 / dz;
-                int dy1 = height / 2 - height / 2 / dz;
+                int dx1 = mouseX - mouseX / dz;
+                int dy1 = mouseY - mouseY / dz;
                 int dx2 = dx1 + width / dz;
                 int dy2 = dy1 + height / dz;
-                back.getGraphics().drawImage(image, 0, 0, width, height, dx1, dy1, dx2, dy2, null);
+                bg.drawImage(image, 0, 0, width, height, dx1, dy1, dx2, dy2, null);
             }
+            bg.dispose();
             flip();
         }
 
-        notifyImagePaint();
+        mainPanel.repaint();
         createTasks();
     }
 
@@ -191,7 +203,7 @@ public class Screen implements ImageMoveListener, ImageResizeListener,
                 }
             }
         }
-        cached.stream().forEach(executorService::submit);
+        cached.forEach(executorService::submit);
     }
 
     public void paint(int zoom, long x, long y, Image result) {
@@ -206,31 +218,7 @@ public class Screen implements ImageMoveListener, ImageResizeListener,
             int x1 = (int) Math.min(width, x + Configuration.PIXELS_IN_UNIT);
             int y1 = (int) Math.min(height, y + Configuration.PIXELS_IN_UNIT);
             image.getGraphics().drawImage(result, (int) x, (int) y, null);
-            notifyImagePaint(x0, y0, x1, y1);
-        }
-    }
-
-    public void addImagePaintListener(ImagePaintListener listener) {
-        try (FastLock.Raii w = lock.write()) {
-            listenerList.add(ImagePaintListener.class, listener);
-        }
-    }
-
-    public void removeImagePaintListener(ImagePaintListener listener) {
-        try (FastLock.Raii r = lock.read()) {
-            listenerList.remove(ImagePaintListener.class, listener);
-        }
-    }
-
-    private void notifyImagePaint() {
-        for (ImagePaintListener listener : listenerList.getListeners(ImagePaintListener.class)) {
-            listener.repaint();
-        }
-    }
-
-    private void notifyImagePaint(int x0, int y0, int x1, int y1) {
-        for (ImagePaintListener listener : listenerList.getListeners(ImagePaintListener.class)) {
-            listener.repaint(x0, y0, x1, y1);
+            mainPanel.repaint(x0, y0, x1, y1);
         }
     }
 }

@@ -2,17 +2,13 @@ package ibessonov.fractal.gui;
 
 public class MainFrame extends javax.swing.JFrame {
 
+    private final MainPanel mainPanel;
+
     public MainFrame() {
-        initComponents();
-    }
-
-    @SuppressWarnings("unchecked")
-    private void initComponents() {
-
         mainPanel = new MainPanel();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
-        setTitle("Mandelbrot Set 2.0");
+        setTitle("Mandelbrot Set 3.0");
         setMinimumSize(new java.awt.Dimension(640, 480));
 
         javax.swing.GroupLayout mainPanelLayout = new javax.swing.GroupLayout(mainPanel);
@@ -39,6 +35,4 @@ public class MainFrame extends javax.swing.JFrame {
 
         pack();
     }
-
-    private MainPanel mainPanel;
 }

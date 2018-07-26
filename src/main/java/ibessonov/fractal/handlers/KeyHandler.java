@@ -27,7 +27,7 @@ public final class KeyHandler extends KeyAdapter {
         File file = new File(getFileName());
         try {
             ImageIO.write(screen.getRenderedImage(), getExtension(), file);
-        } catch (IOException ex) {
+        } catch (IOException ignored) {
         }
     }
 

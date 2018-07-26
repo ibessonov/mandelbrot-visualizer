@@ -1,12 +1,10 @@
 package ibessonov.fractal.screen;
 
-import ibessonov.fractal.cache.Colors;
 import ibessonov.fractal.cache.PiecesCache;
 import ibessonov.fractal.conf.Configuration;
-import ibessonov.fractal.util.ThreadLocalIntArray;
-import java.awt.Image;
+
 import java.awt.image.BufferedImage;
-import java.awt.image.WritableRaster;
+import java.awt.image.DataBufferInt;
 
 /**
  *
@@ -15,7 +13,6 @@ import java.awt.image.WritableRaster;
 public class CalculationTask implements Runnable {
 
     private static final int SIZE = (int) Configuration.PIXELS_IN_UNIT;
-    private static final ThreadLocalIntArray buffer = new ThreadLocalIntArray(SIZE * SIZE);
     private final long x, y;
     private final int zoom;
     private final Screen screen;
@@ -28,20 +25,11 @@ public class CalculationTask implements Runnable {
     }
 
     @Override
-    @SuppressWarnings("CallToThreadDumpStack")
     public void run() {
-        Image result = PiecesCache.get(zoom, x, y);
+        BufferedImage result = (BufferedImage) PiecesCache.get(zoom, x, y);
         if (null == result) {
             result = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_RGB);
-            WritableRaster raster = ((BufferedImage) result).getRaster();
-            int[] colors = buffer.get();
-            Calculator.getPiece(x, y, zoom, colors);
-            for (int i = 0; i < SIZE; ++i) {
-                for (int j = 0; j < SIZE; ++j) {
-                    int[] color = Colors.get(colors[i * SIZE + j]);
-                    raster.setPixel(i, j, color);
-                }
-            }
+            Calculator.getPiece(x, y, zoom, ((DataBufferInt) result.getRaster().getDataBuffer()).getData());
             PiecesCache.store(zoom, x, y, result);
         }
         screen.paint(zoom, x, y, result);

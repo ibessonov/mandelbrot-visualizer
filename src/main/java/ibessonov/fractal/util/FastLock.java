@@ -14,20 +14,19 @@ public final class FastLock {
     private final Lock write = lock.writeLock();
 
     @FunctionalInterface
-    public static interface Raii extends AutoCloseable {
+    public interface Raii extends AutoCloseable {
 
-        @Override
-        void close();
+        @Override void close();
     }
 
     public Raii read() {
         read.lock();
-        return () -> { read.unlock(); };
+        return read::unlock;
     }
 
     public Raii write() {
         write.lock();
-        return () -> { write.unlock(); };
+        return write::unlock;
     }
 
 }
